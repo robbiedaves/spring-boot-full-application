@@ -2201,7 +2201,9 @@ spring.profiles.active=springdatajpa
 ```
 
 I think there are some bugs but in general I think its working.
+
 We also need to follow this tutorial to get H2 and another DB working
+
 https://springframework.guru/using-h2-and-oracle-with-spring-boot/
 
 
