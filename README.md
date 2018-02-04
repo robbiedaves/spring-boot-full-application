@@ -134,3 +134,165 @@ Add the following to the head section of index.html
 Now re-visit the web page and you should see it styled correctly.
 
 ### Part 3 - Persistence layer with Spring Boot, H2 and Spring Data JPA.
+
+We are going to use H2 database, and H2 comes with a nice console
+
+However, as we are using spring security, we need to allow the console access.
+
+First, lets configure the h2 console.
+
+Normally, you’d configure the H2 database in the web.xml file as a servlet, but Spring Boot is going to use an embedded instance of Tomcat, so we don’t have access to the web.xml file. Spring Boot does provide us a mechanism to use for declaring servlets via a Spring Boot ServletRegistrationBean.
+
+Add this to the configuration folder:
+```java
+package com.robxx.springbootapp.configuration;
+
+import org.h2.server.web.WebServlet;
+import org.springframework.boot.web.servlet.ServletRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class WebConfiguration {
+
+    @Bean
+    ServletRegistrationBean h2servletRegistrion() {
+        ServletRegistrationBean registrationBean = new ServletRegistrationBean(new WebServlet());
+        registrationBean.addUrlMappings("/console/*");
+        return registrationBean;
+    }
+}
+```
+If you are not using Spring Security with the H2 database console, this is all you need to do. When you run your Spring Boot application, you’ll now be able to access the H2 database console at http://localhost:8080/console
+
+CAUTION: This is not a Spring Security Configuration that you would want to use for a production website. These settings are only to support development of a Spring Boot web application and enable access to the H2 database console. I cannot think of an example where you’d actually want the H2 database console exposed on a production database.
+
+Now change the SecurityConfiguration class to include the console route
+```java
+package com.robxx.springbootapp.configuration;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+
+@Configuration
+public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity httpSecurity) throws Exception {
+        httpSecurity.authorizeRequests().antMatchers("/").permitAll().and()
+                .authorizeRequests().antMatchers("/console/**").permitAll();
+
+        httpSecurity.csrf().disable();
+        httpSecurity.headers().frameOptions().disable();
+    }
+}
+```
+
+Now goto http://localhost:8080/console
+
+The settings are:
+- Driver Class =    org.h2.Driver
+- JDBC URL  =  jdbc:h2:mem:testdb
+- User Name	=    sa
+- Password =   blank
+
+##### JPA Entities
+
+Add a new package called domain and add a JPA entity java class called Product.java
+```java
+package com.robxx.springbootapp.domain;
+
+import javax.persistence.*;
+import java.math.BigDecimal;
+
+@Entity
+public class Product {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Integer id;
+
+    @Version
+    private Integer version;
+
+    private String productId;
+    private String description;
+    private String imageUrl;
+    private BigDecimal price;
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getProductId() {
+        return productId;
+    }
+
+    public void setProductId(String productId) {
+        this.productId = productId;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+}
+```
+
+Now add a repository
+
+Add a new package called repositories 
+
+Now add a new class called ProductRepository.java
+```java
+package com.robxx.springbootapp.repositories;
+
+import com.robxx.springbootapp.domain.Product;
+import org.springframework.data.repository.CrudRepository;
+
+public interface ProductRepository extends CrudRepository<Product, Integer> {
+}
+``` 
+
+##### Spring Data JPA Repository Test Configuration
+Add the following class to configure the JPA repository
+
+While this is an empty Java class file, each of the annotations is very important.
+
+* @Configuration  tells the Spring Framework this is a Java configuration class.
+* @EnableAutoConfiguration tells Spring Boot to do its auto configuration magic. This is what has Spring Boot automatically create the Spring Beans with sensible defaults for our tests.
+* @EntityScan specifies the packages to look for JPA Entities.
+* @EnableJpaRepositories enables the auto configuration of Spring Data JPA.
+* @EnableTransactionManagement Enables Spring’s annotation driven transaction management
+
