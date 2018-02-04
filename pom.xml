@@ -68,6 +68,17 @@
 			<version>3.0.2.RELEASE</version>
 		</dependency>
 
+		<!-- jasypt security  -->
+		<dependency>
+			<groupId>org.jasypt</groupId>
+			<artifactId>jasypt</artifactId>
+			<version>1.9.2</version>
+		</dependency>
+		<dependency>
+			<groupId>org.jasypt</groupId>
+			<artifactId>jasypt-springsecurity3</artifactId>
+			<version>1.9.2</version>
+		</dependency>
 
 		<!-- Webjars -->
 		<dependency>
