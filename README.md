@@ -445,3 +445,361 @@ public class ProductLoader implements ApplicationListener<ContextRefreshedEvent>
 Now we can run the tests and start the application and check the h2 database and see 2 products written by the product loader.
 
 ### Part 4 - Spring MVC
+
+MVC Overview
+* Model - Model refers to a data model, or some type of data structure. For example a web page showing a list of products, the ‘model’ would contain a list of product data.
+* View - The view layer, in Java frequently a JSP. This will take data from the Model and render the view.
+* Controller - Can be described like a traffic cop. It will take an incoming request, decide what to do with it, then direct the resulting action. For example, the controller could get a view product request. It will direct a service to get the product data, then direct to the product view and provide the ‘model’ (product data) to the view.
+
+First create a new package called services and add a new interface called ProductService.java
+```java
+package com.robxx.springbootapp.services;
+
+import com.robxx.springbootapp.domain.Product;
+
+public interface ProductService {
+    Iterable<Product> listAllProducts();
+
+    Product getProductById(Integer id);
+
+    Product saveProduct(Product product);
+
+    void deleteProduct(Integer id);
+}
+```
+
+Next create a new class called ProductController in the controllers package and add the following:
+```java
+package com.robxx.springbootapp.controllers;
+
+import com.robxx.springbootapp.domain.Product;
+import com.robxx.springbootapp.services.ProductService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+
+@Controller
+public class ProductController {
+
+    private ProductService productService;
+
+    @Autowired
+    public void setProductService(ProductService productService) {
+        this.productService = productService;
+    }
+
+    @RequestMapping("product/new")
+    public String newProduct(Model model) {
+        model.addAttribute("product", new Product());
+        return "productform";
+    }
+
+    @RequestMapping(value="product", method = RequestMethod.POST)
+    public String saveProduct(Product product) {
+        productService.saveProduct(product);
+        return "redirect:/product/" + product.getId();
+    }
+
+    @RequestMapping("product/{id}")
+    public String showProduct(@PathVariable Integer id, Model model) {
+        model.addAttribute("product", productService.getProductById(id));
+        return "productshow";
+    }
+
+    @RequestMapping(value = "/products", method = RequestMethod.GET)
+    public String list(Model model) {
+        model.addAttribute("products", productService.listAllProducts());
+        return "products";
+    }
+
+    @RequestMapping("product/edit/{id")
+    public String edit(@PathVariable Integer id, Model model) {
+        model.addAttribute("product", productService.getProductById(id));
+        return "productform";
+    }
+
+    @RequestMapping("product/delete/{id}")
+    public String delete(@PathVariable Integer id) {
+        productService.deleteProduct(id);
+        return "redirect:/products";
+    }
+}
+```
+
+Now add the implementation of our ProductService interface by adding ProductServiceImpl in the services package
+
+```java
+package com.robxx.springbootapp.services;
+
+import com.robxx.springbootapp.domain.Product;
+import com.robxx.springbootapp.repositories.ProductRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+
+public class ProductServiceImpl implements ProductService {
+
+    private ProductRepository productRepository;
+
+    @Autowired
+    public void setProductRepository(ProductRepository productRepository) {
+        this.productRepository = productRepository;
+    }
+
+    @Override
+    public Iterable<Product> listAllProducts() {
+        return productRepository.findAll();
+    }
+
+    @Override
+    public Product getProductById(Integer id) {
+        return productRepository.findOne(id);
+    }
+
+    @Override
+    public Product saveProduct(Product product) {
+        return productRepository.save(product);
+    }
+
+    @Override
+    public void deleteProduct(Integer id) {
+        productRepository.delete(id);
+    }
+}
+```
+
+##### Tymeleaf and Tymeleaf fragments
+
+Thymeleaf fragments are a very powerful feature of Thymeleaf. They allow you to define repeatable chunks of code for your website. Once you define a Thymeleaf fragment, you can reuse it in other Thymeleaf templates. This works great for components you wish to reuse across your web pages.
+
+Create a new folder in the templates folder called fragments
+
+Now we are going to create a standard header fragment and a menuu fragment.
+
+Add a new file called headerinc.html and copy the code from the index.html head section:
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en" th:fragment="head">
+
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+
+    <script th:src="@{/webjars/jquery/3.3.1/jquery.min.js}"></script>
+    <script th:src="@{/webjars/bootstrap/3.3.5/js/bootstrap.min.js}"></script>
+
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/3.3.5/css/bootstrap.min.css}" />
+    <link href="../static/css/main.css" th:href="@{css/main.css}" rel="stylesheet" media="screen"/>
+
+</head>
+<body>
+
+</body>
+</html>
+```
+
+Next add another fragment called header.html with the following code:
+
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en">
+
+</head>
+<body>
+
+<div class="container">
+    <div th:fragment="header">
+        <nav class="navbar navbar-default">
+            <div class="container-fluid">
+                <div class="navbar-header">
+                    <a class="navbar-brand" href="#" th:href="@{/}">Home</a>
+                    <ul class="nav navbar-nav">
+                        <li><a href="#" th:href="@{/products}">Products</a></li>
+                        <li><a href="#" th:href="@{/product/new}">Create Product</a></li>
+                    </ul>
+
+                </div>
+            </div>
+        </nav>
+
+        <div class="jumbotron">
+            <div class="row text-center">
+                <div class="">
+                    <h2>Spring Framework Guru</h2>
+
+                    <h3>Spring Boot Web App</h3>
+                </div>
+            </div>
+            <div class="row text-center">
+                <img src="../../static/images/spring-io.png" width="400"
+                     th:src="@{/images/spring-io.png}"/>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
+```
+
+Thymeleaf adds these to templates using comments
+
+Now in index.html change the file to be as following:
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en">
+    <title>robxx spring boot full application</title>
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+</div>
+</body>
+</html>
+```
+
+Now go to the browser and open the page.
+If you view the source, you will see that the fragments have been included.
+
+##### Thymeleaf Views for CRUD Application
+
+Now to add the product views:
+
+productshow.html
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en">
+    <title>robxx spring boot full application</title>
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+
+    <h2>Product Details</h2>
+    <div>
+        <form class="form-horizontal">
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Product Id:</label>
+                <div class="col-sm-10">
+                    <p class="form-control-static" th:text="${product.id}">Product Id</p></div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Description:</label>
+                <div class="col-sm-10">
+                    <p class="form-control-static" th:text="${product.description}">description</p>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Price:</label>
+                <div class="col-sm-10">
+                    <p class="form-control-static" th:text="${product.price}">Priceaddd</p>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Image Url:</label>
+                <div class="col-sm-10">
+                    <p class="form-control-static" th:text="${product.imageUrl}">url....</p>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>
+```
+
+products.html
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en">
+    <title>robxx spring boot full application</title>
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+    <div th:if="${not #lists.isEmpty(products)}">
+        <h2>Product List</h2>
+        <table class="table table-striped">
+            <tr>
+                <th>Id</th>
+                <th>Product Id</th>
+                <th>Description</th>
+                <th>Price</th>
+                <th>View</th>
+                <th>Edit</th>
+                <th>Delete</th>
+            </tr>
+            <tr th:each="product : ${products}">
+                <td th:text="${product.id}"><a href="/product/${product.id}">Id</a></td>
+                <td th:text="${product.productId}">Product Id</td>
+                <td th:text="${product.description}">descirption</td>
+                <td th:text="${product.price}">price</td>
+                <td><a th:href="${'/product/' + product.id}">View</a></td>
+                <td><a th:href="${'/product/edit/' + product.id}">Edit</a></td>
+                <td><a th:href="${'/product/delete/' + product.id}">Delete</a></td>
+            </tr>
+        </table>
+
+    </div>
+</div>
+
+</body>
+</html>
+```
+
+productform.html
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en">
+    <title>robxx spring boot full application</title>
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+
+    <h2>Product Details</h2>
+    <div>
+        <form class="form-horizontal" th:object="${product}" th:action="@{/product}" method="post">
+            <input type="hidden" th:field="*{id}"/>
+            <input type="hidden" th:field="*{version}"/>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Description:</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" th:field="*{description}"/>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Price:</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" th:field="*{price}"/>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Image Url:</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" th:field="*{imageUrl}"/>
+                </div>
+            </div>
+            <div class="row">
+                <button type="submit" class="btn btn-default">Submit</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>
+```
+
+Bug: The product ID for the second product seems to be missing! Find out why.
+
