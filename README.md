@@ -288,6 +288,25 @@ public interface ProductRepository extends CrudRepository<Product, Integer> {
 ##### Spring Data JPA Repository Test Configuration
 Add the following class to configure the JPA repository
 
+Note: This is in the configuration package in the test folder only.
+```java
+package com.robxx.springbootapp.configuration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+@Configuration
+@EnableAutoConfiguration
+@EntityScan(basePackages = {"com.robxx.springbootapp.domain"})
+@EnableJpaRepositories(basePackages = {"com.robxx.springbootapp.repositories"})
+@EnableTransactionManagement
+public class RepositoryConfiguration {
+
+}
+```
+
 While this is an empty Java class file, each of the annotations is very important.
 
 * @Configuration  tells the Spring Framework this is a Java configuration class.
@@ -296,3 +315,133 @@ While this is an empty Java class file, each of the annotations is very importan
 * @EnableJpaRepositories enables the auto configuration of Spring Data JPA.
 * @EnableTransactionManagement Enables Spring’s annotation driven transaction management
 
+To perform the tests, add a new class in the test -> repositories package called ProductRepositoryTest:
+```java
+package com.robxx.springbootapp.repositories;
+
+import com.robxx.springbootapp.domain.Product;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+
+import java.math.BigDecimal;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@SpringBootTest(webEnvironment= SpringBootTest.WebEnvironment.RANDOM_PORT)
+public class ProductRepositoryTest {
+
+    private ProductRepository productRepository;
+
+    @Autowired
+    public void setProductRepository(ProductRepository productRepository) {
+        this.productRepository = productRepository;
+    }
+
+    @Test
+    public void testSaveProduct(){
+        //setup product
+        Product product = new Product();
+        product.setDescription("Spring Framework Guru Shirt");
+        product.setPrice(new BigDecimal("18.95"));
+        product.setProductId("1234");
+
+        //save product, verify has ID value after save
+        assertNull(product.getId()); //null before save
+        productRepository.save(product);
+        assertNotNull(product.getId()); //not null after save
+
+        //fetch from DB
+        Product fetchedProduct = productRepository.findOne(product.getId());
+
+        //should not be null
+        assertNotNull(fetchedProduct);
+
+        //should equal
+        assertEquals(product.getId(), fetchedProduct.getId());
+        assertEquals(product.getDescription(), fetchedProduct.getDescription());
+
+        //update description and save
+        fetchedProduct.setDescription("New Description");
+        productRepository.save(fetchedProduct);
+
+        //get from DB, should be updated
+        Product fetchedUpdatedProduct = productRepository.findOne(fetchedProduct.getId());
+        assertEquals(fetchedProduct.getDescription(), fetchedUpdatedProduct.getDescription());
+
+        //verify count of products in DB
+        long productCount = productRepository.count();
+        assertEquals(productCount, 3);
+
+        //get all products, list should only have three
+        Iterable<Product> products = productRepository.findAll();
+
+        int count = 0;
+
+        for(Product p : products){
+            count++;
+        }
+
+        assertEquals(count, 3);
+    }
+}
+```
+
+Now we can add a product loader. This is because we are using an in memory database.
+
+```java
+package com.robxx.springbootapp.bootstrap;
+
+import com.robxx.springbootapp.domain.Product;
+import com.robxx.springbootapp.repositories.ProductRepository;
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationListener;
+import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+
+@Component
+public class ProductLoader implements ApplicationListener<ContextRefreshedEvent> {
+
+    private ProductRepository productRepository;
+
+    private Logger log = Logger.getLogger(ProductLoader.class);
+
+    @Autowired
+    public void setProductRepository(ProductRepository productRepository) {
+        this.productRepository = productRepository;
+    }
+
+    @Override
+    public void onApplicationEvent(ContextRefreshedEvent event) {
+
+        Product shirt = new Product();
+        shirt.setDescription("Spring Framework Guru Shirt");
+        shirt.setPrice(new BigDecimal("18.95"));
+        shirt.setImageUrl("https://springframework.guru/wp-content/uploads/2015/04/spring_framework_guru_shirt-rf412049699c14ba5b68bb1c09182bfa2_8nax2_512.jpg");
+        shirt.setProductId("235268845711068308");
+        productRepository.save(shirt);
+
+        log.info("Saved Shirt - id: " + shirt.getId());
+
+        Product mug = new Product();
+        mug.setDescription("Spring Framework Guru Mug");
+        mug.setImageUrl("https://springframework.guru/wp-content/uploads/2015/04/spring_framework_guru_coffee_mug-r11e7694903c348e1a667dfd2f1474d95_x7j54_8byvr_512.jpg");
+        mug.setProductId("168639393495335947");
+        productRepository.save(mug);
+
+        log.info("Saved Mug - id:" + mug.getId());
+    }
+}
+```
+
+Now we can run the tests and start the application and check the h2 database and see 2 products written by the product loader.
+
+### Part 4 - Spring MVC
