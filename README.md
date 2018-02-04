@@ -803,3 +803,409 @@ productform.html
 
 Bug: The product ID for the second product seems to be missing! Find out why.
 
+### Part 5 - Spring Security
+
+In this section we will use Spring Security to set up authentication and authorization in our application.
+
+Here are the requirements for the security 
+* An anonymous user (user who doesn’t sign in) should be able to view the home page and product listing.
+* An authenticated user, in addition to the home page and product listing, should be able to view the details of a product.
+* An authenticated admin user, in addition to the above, should be able to create, update, and delete products.
+
+We already have security in the pom
+```xml
+<dependency>
+	<groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+```
+
+What is the difference between authentication and authorization?
+* Authentication means ascertaining that somebody really is who they claim to be. Authentication is performed using different mechanisms. One simple and common mechanism is through user credentials in the form of user name and password. These are stored in some type back end data store, such as a SQL database. Others include LDAP, Single Sign-On (SSO), OpenID, and OAuth 2.0.
+* Authorization, on the other hand, defines what you are allowed to do. For example, an authenticated user may be authorized to view products but not to add or delete them.
+
+Open the SecurityConfiguration class, which currently authorizes every to access all and change it as shown:
+```java
+package com.robxx.springbootapp.configuration;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+
+@Configuration
+public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity httpSecurity) throws Exception {
+        httpSecurity.authorizeRequests().antMatchers("/", "/products", "/products/show/*", "/console/**").permitAll()
+                .anyRequest().authenticated()
+                .and()
+                .formLogin().loginPage("/login").permitAll()
+                .and()
+                .logout().permitAll();
+
+        httpSecurity.csrf().disable();
+        httpSecurity.headers().frameOptions().disable();
+    }
+}
+```
+
+This security configuration will:
+* Allows all requests to the /, /products, /product/show/*, /console/** paths (Line 5)
+* Secures all other paths of the application to require authentication (Line 6)
+* Allows everyone to view a custom /login page specified by loginPage()(Line 8)
+* Permits all to make logout calls (Line 10)
+* Disables CSRF protection (Line 12)
+* Disables X-Frame-Options in Spring Security (Line 13) for access to H2 database console. By default, Spring Security will protect against CRSF attacks.
+
+Note: Although this is not a production-level configuration, it should get us started with the basic in-memory authentication. I’ll revisit this part, when I discuss more advanced security configuration in my upcoming posts.
+
+In the same SecurityConfiguration class, we will also autowire a configureGlobal() overridden method of WebSecurityConfigurerAdapter. At runtime, Spring will inject an AuthenticationManagerBuilder that we will use to configure the simplest, default in-memory authentication with two users.
+
+So add a configGlobal method to the class...
+
+```java
+package com.robxx.springbootapp.configuration;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+
+@Configuration
+public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity httpSecurity) throws Exception {
+        httpSecurity.authorizeRequests().antMatchers("/", "/products", "/products/show/*", "/console/**").permitAll()
+                .anyRequest().authenticated()
+                .and()
+                .formLogin().loginPage("/login").permitAll()
+                .and()
+                .logout().permitAll();
+
+        httpSecurity.csrf().disable();
+        httpSecurity.headers().frameOptions().disable();
+    }
+
+    @Autowired
+    public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
+        auth
+                .inMemoryAuthentication()
+                .withUser("admin").password("admin").roles("ADMIN")
+                .and().withUser("user").password("user").roles("USER");;
+    }
+}
+
+```
+This will add 2 users in memory to get us started.
+
+##### The Login Page
+
+Add the following method to the ProductController
+```java
+    @RequestMapping(value = "/login", method = RequestMethod.GET)
+    public String login() {
+        return "login";
+    }
+```
+
+Now add the login.html page
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Login Form</title>
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+    <div th:if="${param.error}">
+        <label style="color:red">Invalid username and password.</label>
+    </div>
+    <div th:if="${param.logout}">
+        <label>
+            You have been logged out.
+        </label>
+    </div>
+
+    <form th:action="@{/login}" method="post">
+
+        <table class="table table-striped">
+            <tr>
+                <td><label> User Name : <input type="text" name="username"/> </label></td>
+            </tr>
+            <tr>
+                <td><label> Password : <input type="password" name="password"/> </label></td>
+            </tr>
+            <tr>
+                <td> <button type="submit" class="btn btn-default">Sign In</button></td>
+            </tr>
+        </table>
+
+    </form>
+</div>
+</body>
+</html>
+```
+
+This is a standard Thymeleaf template that presents a form to capture a username and password and post them to /login. Spring Security provides a filter that intercepts that request and authenticates the user with our configured in-memory authentication provider. If authentication succeeds, the application displays the requested page. If authentication fails, the request is redirected to /login?error and the login page displays the appropriate error message (Line 10 – Line 12). Upon successfully signing out, our application is sent to /login?logout and the login page displays a sign out message (Line 13 – Line 17).
+
+##### Spring Security Integration in Thymeleaf
+To integrate Spring Security in our Thymeleaf templates, we will use the Thymeleaf “extras” integration module for Spring Security. For this, we need to add a JAR dependency in our Maven POM like this.
+
+Add the following dependency into the pom
+```xml
+		<dependency>
+			<groupId>org.thymeleaf.extras</groupId>
+			<artifactId>thymeleaf-extras-springsecurity4</artifactId>
+			<version>3.0.2.RELEASE</version>
+		</dependency>
+```
+
+The Thymeleaf “extras” module is not a part of the Thymeleaf core but fully supported by the Thymeleaf team. This module follows its own schema, and therefore we need to include its XML namespace in those templates that will use security features, like this.
+```xml
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
+</html>
+```
+###### Showing Content based on Role
+One of our application requirement states that only authenticated users with the ADMIN role can create products. To address this, we will configure authorization in the header.html Thymeleaf fragment to display the Create Product link only to users with the ADMIN role. In this template, we will also display a welcome message with the user name to an authenticated user. The code of the header.html template file is this:
+
+Change the header.html to include the security and login
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head lang="en">
+    <link rel="stylesheet" type="text/css" href="../static/css/main.css" />
+</head>
+<body>
+
+<div class="container">
+    <div th:fragment="header">
+        <nav class="navbar navbar-default">
+            <div class="container-fluid">
+                <div class="navbar-header">
+                    <a class="navbar-brand" href="#" th:href="@{/}">Home</a>
+                    <ul class="nav navbar-nav">
+                        <li><a href="#" th:href="@{/products}">Products</a></li>
+                        <li><a href="#" th:href="@{/product/new}" sec:authorize="hasRole('ROLE_ADMIN')">Create Product</a></li>
+                        <li><a href="#" th:href="@{/login}">Sign In</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <div class="welcome">
+            <span sec:authorize="isAuthenticated()">Welcome <span sec:authentication="name"></span></span>
+        </div>
+
+        <div class="jumbotron">
+            <div class="row text-center">
+                <div class="">
+                    <h2>robxx spring boot full application</h2>
+
+                    <h3>Spring Boot Web App</h3>
+                </div>
+            </div>
+            <div class="row text-center">
+                <img src="../../static/images/spring-io.png" width="100"
+                     th:src="@{/images/spring-io.png}"/>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
+```
+
+The Thymeleaf security extension provides the sec:authorize attribute that renders its content when the corresponding Spring Security expression evaluates to true.
+
+In Line 16 we used the sec:authorize attribute to display the Create Product link only if the authenticated user has the ADMIN role. Observe that we are checking against ROLE_ADMIN instead of the ADMIN role. This is because of Spring Security’s internal feature of mapping a configured role to the role name prefixed with ROLE_. In Line 23 we again used the sec:authorize attribute to check whether the user is authenticated, and if so, displayed the name using the sec:authenticate attribute.
+
+Our current Product Listing page rendered by the products.html template displays the View, Edit, and Delete links to all users. In this template, we will configure authorization:
+* To show the View, Edit, and Delete links to a user with ADMIN role
+* To show only the View link to a user with USER role
+* Not to show any links to an anonymous user who hasn’t signed in
+
+The code of the products.html page is this.
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head lang="en">
+    <title>spring boot full application</title>
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+
+    <div th:if="${not #lists.isEmpty(products)}">
+        <form th:action="@{/logout}" method="post">
+            <div class="col-sm-10"><h2>Product Listing</h2></div>
+            <div class="col-sm-2" style="padding-top: 30px;">
+                     <span sec:authorize="isAuthenticated()">
+                    <input type="submit" value="Sign Out"/>
+                               </span>
+            </div>
+        </form>
+        <table class="table table-striped">
+            <tr>
+                <th>Id</th>
+                <th>Product Id</th>
+                <th>Description</th>
+                <th>Price</th>
+                <th sec:authorize="hasAnyRole('ROLE_USER','ROLE_ADMIN')">View</th>
+                <th sec:authorize="hasRole('ROLE_ADMIN')">Edit</th>
+                <th sec:authorize="hasRole('ROLE_ADMIN')">Delete</th>
+            </tr>
+            <tr th:each="product : ${products}">
+                <td th:text="${product.id}"><a href="/product/${product.id}">Id</a></td>
+                <td th:text="${product.productId}">Product Id</td>
+                <td th:text="${product.description}">descirption</td>
+                <td th:text="${product.price}">price</td>
+                <td sec:authorize="hasAnyRole('ROLE_USER','ROLE_ADMIN')"><a th:href="${'/product/show/' + product.id}">View</a></td>
+                <td sec:authorize="hasRole('ROLE_ADMIN')"><a th:href="${'/product/edit/' + product.id}">Edit</a></td>
+                <td sec:authorize="hasRole('ROLE_ADMIN')"><a th:href="${'/product/delete/' + product.id}">Delete</a></td>
+            </tr>
+        </table>
+
+    </div>
+</div>
+
+</body>
+</html>
+```
+
+In Line 16 the “Sign Out” form submits a POST to /logout. Upon successfully logging out it will redirect the user to /login?logout. The remaining authorization is performed using the sec:authorize attribute. The hasAnyRole('ROLE_USER','ROLE_ADMIN') expression on Line 30 and Line 39 evaluates to true if the user has either the ROLE_USER or ROLE_ADMIN.
+
+Here is productshow.html
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head lang="en">
+    <title>robxx spring boot full application</title>
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+
+    <form class="form-horizontal" th:action="@{/logout}" method="post">
+        <div class="form-group">
+            <div class="col-sm-10"><h2>Product Details</h2></div>
+            <div class="col-sm-2" style="padding-top: 25px;">
+          <span sec:authorize="isAuthenticated()">
+              <input type="submit" value="Sign Out"/>
+           </span>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-2 control-label">Product Id:</label>
+            <div class="col-sm-10">
+                <p class="form-control-static" th:text="${product.id}">Product Id</p></div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-2 control-label">Description:</label>
+            <div class="col-sm-10">
+                <p class="form-control-static" th:text="${product.description}">description</p>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-2 control-label">Price:</label>
+            <div class="col-sm-10">
+                <p class="form-control-static" th:text="${product.price}">Priceaddd</p>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-2 control-label">Image Url:</label>
+            <div class="col-sm-10">
+                <p class="form-control-static" th:text="${product.imageUrl}">url....</p>
+            </div>
+        </div>
+    </form>
+
+</div>
+
+</body>
+</html>
+```
+
+productform.html
+
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head lang="en">
+    <title>robxx spring boot full application</title>
+    <link rel="stylesheet" type="text/css" href="../static/css/main.css" />
+    <!--/*/ <th:block th:include="fragments/headerinc :: head"></th:block> /*/-->
+</head>
+<body>
+<div class="container">
+    <!--/*/ <th:block th:include="fragments/header :: header"></th:block> /*/-->
+
+    <form class="form-horizontal" th:action="@{/logout}" method="post">
+        <div class="form-group">
+            <div class="col-sm-10"> <h2>Product Create/Update</h2></div>
+            <div class="col-sm-2" style="padding-top: 30px;">
+                <input  type="submit" value="Sign Out"/>
+            </div>
+        </div>
+    </form>
+
+    <div>
+        <form class="form-horizontal" th:object="${product}" th:action="@{/product}" method="post">
+            <input type="hidden" th:field="*{id}"/>
+            <input type="hidden" th:field="*{version}"/>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Description:</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" th:field="*{description}"/>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Price:</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" th:field="*{price}"/>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label">Image Url:</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" th:field="*{imageUrl}"/>
+                </div>
+            </div>
+            <div class="row">
+                <button type="submit" class="btn btn-default">Submit</button>
+            </div>
+        </form>
+
+    </div>
+</div>
+</body>
+</html>
+```
+
+The main.css has also been updated:
+```css
+/* main.css file */
+input[type=submit] {
+     background:none!important;
+     border:none;
+     padding:0!important;
+     color: blue;
+     text-decoration: underline;
+     cursor:pointer;
+}
+```
+
+This seems to work.
+
+BUG: The name next to the welcome tag is not displaying, and also the sign-out button is not styled correctly.
+
+
+### Part 6 - SPRING SECURITY WITH DAO AUTHENTICATION PROVIDER
+
